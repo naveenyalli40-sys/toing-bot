@@ -1,1 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Naveen's Toing Bot</title>
+  <script src="https://telegram.org"></script>
+  <script src="https://tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com"></script>
+  <script crossorigin src="https://unpkg.com"></script>
+  <script src="https://unpkg.com"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <div id="root"></div>
 
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const API_URL = "https://onrender.com";
+    const DEFAULT_REF_LINK = "https://toingit.com";
+    const BOT_TITLE = "Naveen's Toing Bot";
+    const BOT_HANDLE = "@NaveenPro";
+
+    const SAMPLE_RESTAURANTS = [
+      { id: 1, name: "Biryani Blues", item: "Hyderabadi Dum Biryani", price: 149, tag: "₹50 OFF", rating: "4.4", time: "25 mins", cat: "Biryani" },
+      { id: 2, name: "Burger Farm", item: "Crispy Double Cheese Burger", price: 119, tag: "₹50 OFF", rating: "4.3", time: "20 mins", cat: "Burgers" },
+      { id: 3, name: "La Pino'z Pizza", item: "Farm Villa Medium Pizza", price: 199, tag: "FLAT ₹60 OFF", rating: "4.5", time: "30 mins", cat: "Pizza" },
+      { id: 4, name: "Punjabi Angithi", item: "Paneer Tikka Masala + 2 Naan", price: 159, tag: "₹50 OFF", rating: "4.2", time: "28 mins", cat: "North Indian" },
+      { id: 5, name: "NIC Ice Creams", item: "Belgian Chocolate Tub (500ml)", price: 129, tag: "FREE DEL", rating: "4.6", time: "18 mins", cat: "Desserts" }
+    ];
+
+    const COUPONS = [
+      { code: "REFER50", title: "₹50 Refer Cash", desc: "Auto-applies on ₹100+ cart for FRESH accounts", min: 100, discount: 50 },
+      { code: "NAVEEN50", title: "FLAT ₹50 OFF", desc: "Valid on orders above ₹149", min: 149, discount: 50 },
+      { code: "FIRST100", title: "₹60 Welcome Deal", desc: "Valid on first Toing order above ₹199", min: 199, discount: 60 }
+    ];
+
+    function App() {
+      const [activeTab, setActiveTab] = useState("accounts");
+      const [darkMode, setDarkMode] = useState(false);
+      const [toast, setToast] = useState("");
+      const [loading, setLoading] = useState(false);
+      const [tgUser, setTgUser] = useState({ name: "Naveen", username: "NaveenPro" });
+
+      const [accounts, setAccounts] = useState([]);
+      const [activeAccId, setActiveAccId] = useState("");
+      const [addresses, setAddresses] = useState(() => JSON.parse(localStorage.getItem("naveen_toing_addr") || "[]"));
+      const [selectedAddress, setSelectedAddress] = useState(null);
+      const [cart, setCart] = useState([]);
+      const [orders, setOrders] = useState([]);
+
+      const [showMap, setShowMap] = useState(false);
+      const [mapSearch, setMapSearch] = useState("");
+      const [mapAddress, setMapAddress] = useState({ title: "Khattalwada", full: "Khattalwada, Wadgaon, Maharashtra 442301, India" });
+      const [loginMode, setLoginMode] = useState("number");
+      const [phoneInput, setPhoneInput] = useState("");
+      const [otpStep, setOtpStep] = useState(false);
+      const [otpInput, setOtpInput] = useState("");
+      const [jsonInput, setJsonInput] = useState("");
+      const [addrLinkInput, setAddrLinkInput] = useState("");
+      const [appliedCoupon, setAppliedCoupon] = useState(null);
+      const [storeCat, setStoreCat] = useState("All");
+      const [storeQuery, setStoreQuery] = useState("");
+
+      useEffect(() => {
+        if (window.Telegram?.WebApp) {
+          const twa = window.Telegram.WebApp;
+          twa.ready();
+          twa.expand();
+          const u = twa.initDataUnsafe?.user;
+          if (u) {
+            setTgUser({
+              name: [u.first_name, u.last_name].filter(Boolean).join(" ") || "Naveen",
+              username: u.username || "NaveenPro"
+            });
+          }
+        }
+        fetch(`${API_URL}/api/data`)
+          .then(r => r.json())
+          .then(d => {
+            if (d.accounts) {
+              setAccounts(d.accounts);
+              if (d.accounts.length > 0) setActiveAccId(d.accounts[0].id);
+            }
+            if (d.orders) setOrders(d.orders);
+          })
+          .catch(() => {});
+      }, []);
+
+      useEffect(() => { localStorage.setItem("naveen_toing_addr", JSON.stringify(addresses)); }, [addresses]);
+
+      const notify = (msg) => {
+        setToast(msg);
+        setTimeout(() => setToast(""), 2800);
+      };
+
+      const activeAccount = accounts.find(a => a.id === activeAccId) || accounts[0] || null;
+      const handleSendOtp = async () => {
+        setLoading(true);
+        try {
+          const res = await fetch(`${API_URL}/api/send-otp`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phone: phoneInput })
+          });
+          const data = await res.json();
+          if (data.success) {
+            setOtpStep(true);
+            notify("OTP sent! Check your Telegram bot chat");
+          } else {
+            notify(data.error || "Failed to send OTP");
+          }
+        } catch {
+          notify("Waking up server... tap Send OTP again in 5s");
+        }
+        setLoading(false);
+      };
+
+      const handleVerifyOtp = async () => {
+        setLoading(true);
+        try {
+          const res = await fetch(`${API_URL}/api/verify-otp`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phone: phoneInput, otp: otpInput })
+          });
+          const data = await res.json();
+          if (data.success) {
+            setAccounts(data.accounts);
+            setActiveAccId(data.account.id);
+            setPhoneInput("");
+            setOtpInput("");
+            setOtpStep(false);
+            notify("Verified! ₹50 Refer Cash credited");
+          } else {
+            notify(data.error || "Invalid OTP");
+          }
+        } catch {
+          notify("Verification failed");
+        }
+        setLoading(false);
+      };
+
+      const handleJsonLogin = () => {
+        if (!jsonInput.trim()) return notify("Paste Session JSON or Access Key");
+        const newAcc = {
+          id: "acc_" + Date.now(),
+          phone: "+91 90000 " + Math.floor(10000 + Math.random() * 89999),
+          customerId: String(Math.floor(800000000 + Math.random() * 99999999)),
+          name: "Imported Session",
+          freeCash: 50,
+          status: "FRESH",
+          refLink: DEFAULT_REF_LINK,
+          token: jsonInput.trim().slice(0, 14)
+        };
+        setAccounts(prev => [newAcc, ...prev]);
+        setActiveAccId(newAcc.id);
+        setJsonInput("");
+        notify("Session imported with ₹50 Refer Cash!");
+      };
+
+      const addToCart = (item) => {
+        setCart(prev => {
+          const found = prev.find(i => i.id === item.id);
+          if (found) return prev.map(i => i.id === item.id ? { ...i, qty: i.qty + 1 } : i);
+          return [...prev, { ...item, qty: 1 }];
+        });
+        notify(`Added ${item.item}`);
+      };
+
+      const updateQty = (id, delta) => {
+        setCart(prev => prev.map(i => i.id === id ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0));
+      };
+
+      const subtotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
+      const hasAutoReferDiscount = activeAccount && activeAccount.freeCash >= 50 && subtotal >= 100;
+      const referDiscount = hasAutoReferDiscount ? 50 : 0;
+      const extraCouponDiscount = appliedCoupon && appliedCoupon.code !== "REFER50" && subtotal >= appliedCoupon.min ? appliedCoupon.discount : 0;
+      const totalDiscount = referDiscount + extraCouponDiscount;
+      const finalTotal = Math.max(0, subtotal - totalDiscount);
+
+      const handlePlaceOrder = async () => {
+        if (!selectedAddress) {
+          notify("Select a delivery address first!");
+          setActiveTab("address");
+          return;
+        }
+        setLoading(true);
+        try {
+          const res = await fetch(`${API_URL}/api/place-order`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              accountId: activeAccount?.id,
+              items: cart,
+              subtotal,
+              discount: totalDiscount,
+              finalTotal,
+              address: selectedAddress,
+              telegramUser: tgUser
+            })
+          });
+          const data = await res.json();
+          if (data.success) {
+            setAccounts(data.accounts);
+            setOrders(data.orders);
+            setCart([]);
+            setAppliedCoupon(null);
+            setActiveTab("orders");
+            notify(`Order ${data.order.id} placed!`);
+          }
+        } catch {
+          notify("Order failed. Try again");
+        }
+        setLoading(false);
+      };
+
+      const handleAddLinkAddress = () => {
+        if (!addrLinkInput.trim()) return notify("Paste a valid address link");
+        const addr = { id: Date.now(), title: "Imported Toing Address", full: addrLinkInput.trim() };
+        setAddresses(prev => [addr, ...prev]);
+        setSelectedAddress(addr);
+        setAddrLinkInput("");
+        notify("Address imported!");
+      };
+
+      const handleConfirmMap = () => {
+        const addr = { id: Date.now(), title: mapAddress.title, full: mapAddress.full };
+        setAddresses(prev => [addr, ...prev]);
+        setSelectedAddress(addr);
+        setShowMap(false);
+        notify(`Delivery set to ${addr.title}`);
+      };
+
+      const bgMain = darkMode ? "bg-slate-950 text-slate-100" : "bg-slate-50 text-slate-900";
+      const cardBg = darkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200/80";
+      const subText = darkMode ? "text-slate-400" : "text-slate-500";
+
+      return (
+        <div className={`min-h-screen pb-24 max-w-md mx-auto relative shadow-xl ${bgMain}`}>
+          {toast && (
+            <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs font-medium px-4 py-2.5 rounded-full shadow-lg border border-slate-700 whitespace-nowrap">
+              {toast}
+            </div>
+          )}
+
+          <div className={`sticky top-0 z-30 border-b ${darkMode ? "bg-slate-900/95 border-slate-800" : "bg-white/95 border-slate-200"} backdrop-blur`}>
+            <div className="px-4 py-2.5 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
+              <span className="font-bold text-base tracking-tight">{BOT_TITLE}</span>
+              <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">{BOT_HANDLE}</span>
+            </div>
+            <div className="px-3.5 py-2.5 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center text-white font-black text-lg">🥔</div>
+                <div>
+                  <div className="flex items-center gap-1">
+                    <span className="font-black text-emerald-600 text-sm">TOING</span>
+                    <span className="bg-emerald-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">PRO</span>
+                  </div>
+                  <div className="text-[10px] text-emerald-600 font-medium">{BOT_HANDLE}</div>
+                </div>
+              </div>
+              <button onClick={() => setShowMap(true)} className="flex-1 min-w-0 text-left px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+                <div className="text-[9px] font-bold uppercase text-emerald-600">📍 DELIVERING TO</div>
+                <div className="text-xs font-semibold truncate">{selectedAddress ? selectedAddress.title : "Deliver to • Select Delivery Loc... ⌄"}</div>
+              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button onClick={() => setDarkMode(!darkMode)} className={`w-8 h-8 rounded-full border flex items-center justify-center text-xs ${cardBg}`}>{darkMode ? "☀️" : "🌙"}</button>
+                <button onClick={() => setActiveTab("accounts")} className={`w-8 h-8 rounded-full border flex items-center justify-center text-xs ${cardBg}`}>👤</button>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-3.5 space-y-3.5">
+            {activeTab === "store" && (
+              <>
+                <input type="text" value={storeQuery} onChange={(e) => setStoreQuery(e.target.value)} placeholder="🔍 Search restaurants, biryani, burgers..." className={`w-full px-4 py-2.5 rounded-xl border text-xs outline-none ${cardBg}`} />
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <h2 className="font-bold text-sm">🎟️ Available Coupons & Refer Offers</h2>
+                    <span className="text-[11px] text-emerald-600 font-semibold">Auto-Refer Active</span>
+                  </div>
+                  <div className="flex gap-2.5 overflow-x-auto no-scrollbar pb-1">
+                    {COUPONS.map(c => (
+                      <div key={c.code} className="min-w-[210px] p-3 rounded-2xl border border-emerald-500/40 bg-emerald-50/60 dark:bg-emerald-950/20 shrink-0">
+                        <div className="flex justify-between mb-1">
+                          <span className="text-xs font-black text-emerald-700 dark:text-emerald-400">{c.title}</span>
+                          <span className="text-[10px] font-bold bg-emerald-600 text-white px-2 py-0.5 rounded">{c.code}</span>
+                        </div>
+                        <p className={`text-[11px] ${subText}`}>{c.desc}</p>
+                        <button onClick={() => { setAppliedCoupon(c); notify(`Coupon ${c.code} selected!`); }} className="mt-2 text-[11px] font-bold text-emerald-600">
+                          {appliedCoupon?.code === c.code ? "✓ Applied" : "Apply Offer →"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                  {["All", "Biryani", "Burgers", "Pizza", "North Indian", "Desserts"].map(cat => (
+                    <button key={cat} onClick={() => setStoreCat(cat)} className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 ${storeCat === cat ? "bg-emerald-600 text-white" : `${cardBg} border ${subText}`}`}>{cat}</button>
+                  ))}
+                </div>
+                <div className="space-y-2.5">
+                  {SAMPLE_RESTAURANTS.filter(r => (storeCat === "All" || r.cat === storeCat) && (r.name.toLowerCase().includes(storeQuery.toLowerCase()) || r.item.toLowerCase().includes(storeQuery.toLowerCase()))).map(item => (
+                    <div key={item.id} className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 ${cardBg}`}>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">{item.tag}</span>
+                          <span className={`text-[11px] ${subText}`}>⭐ {item.rating} • {item.time}</span>
+                        </div>
+                        <div className="font-bold text-sm">{item.item}</div>
+                        <div className={`text-xs ${subText}`}>{item.name}</div>
+                        <div className="font-extrabold text-sm text-emerald-600">₹{item.price}</div>
+                      </div>
+                      <button onClick={() => addToCart(item)} className="bg-emerald-600 text-white font-bold text-xs px-4 py-2 rounded-xl">+ Add</button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {activeTab === "tools" && (
+              <>
+                <h2 className="font-bold text-base">Toing Tools & Deal Plugins</h2>
+                <div className={`p-4 rounded-2xl border flex items-center justify-between ${cardBg}`}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-black text-lg">🎁</div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm">Refer Cash</span>
+                        <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full">ACTIVE</span>
+                      </div>
+                      <div className={`text-xs mt-0.5 ${subText}`}>Auto applies on ₹100+ cart</div>
+                      <div className="text-[11px] font-semibold text-emerald-600 mt-0.5">Available anytime</div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-black text-base text-emerald-600">₹50</div>
+                    <div className={`text-[10px] ${subText}`}>free cash</div>
+                  </div>
+                </div>
+                <div className={`p-3.5 rounded-2xl border ${cardBg}`}>
+                  <div className="text-xs font-bold mb-1">🔗 Default Auto-Referral Link</div>
+                  <div className="text-[11px] font-mono bg-slate-100 dark:bg-slate-800 p-2 rounded-lg break-all text-emerald-600">{DEFAULT_REF_LINK}</div>
+                  <button onClick={() => { navigator.clipboard?.writeText(DEFAULT_REF_LINK); notify("Copied!"); }} className="mt-2 text-xs font-bold text-emerald-600">Copy Referral Link →</button>
+                </div>
+              </>
+            )}
+
+            {activeTab === "address" && (
+              <>
+                <div className={`p-4 rounded-2xl border space-y-2.5 ${cardBg}`}>
+                  <div className="font-bold text-sm">🔗 Add by Address Link</div>
+                  <div className="flex gap-2">
+                    <input type="text" value={addrLinkInput} onChange={(e) => setAddrLinkInput(e.target.value)} placeholder="https://swiggy.com..." className={`flex-1 px-3 py-2 rounded-xl border text-xs outline-none ${cardBg}`} />
+                    <button onClick={handleAddLinkAddress} className="bg-emerald-600 text-white font-bold text-xs px-4 py-2 rounded-xl">Add →</button>
+                  </div>
+                </div>
+                <button onClick={() => setShowMap(true)} className="w-full bg-emerald-600 text-white font-bold text-xs py-3.5 rounded-xl">+ Add New Address (Map & Details)</button>
+                <div className="space-y-2">
+                  {addresses.map(a => (
+                    <div key={a.id} onClick={() => { setSelectedAddress(a); notify(`Selected: ${a.title}`); }} className={`p-3.5 rounded-xl border cursor-pointer flex justify-between ${selectedAddress?.id === a.id ? "border-emerald-600 bg-emerald-50/40" : cardBg}`}>
+                      <div>
+                        <div className="font-bold text-xs">{a.title}</div>
+                        <div className={`text-[11px] ${subText}`}>{a.full}</div>
+                      </div>
+                      {selectedAddress?.id === a.id && <span className="text-[10px] font-bold bg-emerald-600 text-white px-2 py-0.5 rounded h-fit">ACTIVE</span>}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            {activeTab === "cart" && (
+              <>
+                <div onClick={() => setActiveTab("address")} className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer ${cardBg}`}>
+                  <div>
+                    <div className="font-bold text-xs">📍 {selectedAddress ? selectedAddress.title : "Select Delivery Address"}</div>
+                    <div className={`text-[11px] ${subText}`}>{selectedAddress ? selectedAddress.full : "Tap to pick a saved address"}</div>
+                  </div>
+                  <span className={subText}>›</span>
+                </div>
+                {cart.length === 0 ? (
+                  <div className={`p-8 rounded-2xl border text-center space-y-4 ${cardBg}`}>
+                    <div className="font-bold text-base">Your cart is empty</div>
+                    <button onClick={() => setActiveTab("store")} className="bg-emerald-600 text-white font-bold text-xs px-6 py-3 rounded-xl">Browse Food</button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className={`p-3.5 rounded-2xl border space-y-3 ${cardBg}`}>
+                      {cart.map(item => (
+                        <div key={item.id} className="flex items-center justify-between">
+                          <div>
+                            <div className="font-bold text-xs">{item.item}</div>
+                            <div className={`text-[11px] ${subText}`}>₹{item.price} each</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => updateQty(item.id, -1)} className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 font-bold">-</button>
+                            <span className="text-xs font-bold">{item.qty}</span>
+                            <button onClick={() => updateQty(item.id, 1)} className="w-7 h-7 rounded-lg bg-emerald-600 text-white font-bold">+</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className={`p-4 rounded-2xl border space-y-2 text-xs ${cardBg}`}>
+                      <div className="flex justify-between"><span className={subText}>Subtotal</span><span className="font-bold">₹{subtotal}</span></div>
+                      {hasAutoReferDiscount && <div className="flex justify-between text-emerald-600 font-bold"><span>🎁 Refer Cash Auto-Discount</span><span>- ₹50</span></div>}
+                      {extraCouponDiscount > 0 && <div className="flex justify-between text-emerald-600 font-bold"><span>🎟️ Coupon ({appliedCoupon.code})</span><span>- ₹{extraCouponDiscount}</span></div>}
+                      <div className="border-t pt-2 flex justify-between font-black text-sm"><span>To Pay</span><span className="text-emerald-600">₹{finalTotal}</span></div>
+                    </div>
+                    <button disabled={loading} onClick={handlePlaceOrder} className="w-full bg-emerald-600 text-white font-bold text-sm py-3.5 rounded-xl">
+                      {loading ? "Placing Order..." : `Place Order • ₹${finalTotal} →`}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeTab === "orders" && (
+              <>
+                <h2 className="font-bold text-base">Order History ({orders.length})</h2>
+                {orders.length === 0 ? (
+                  <div className={`p-8 rounded-2xl border text-center space-y-3 ${cardBg}`}>
+                    <div className="font-bold text-sm">No previous orders found</div>
+                    <button onClick={() => setActiveTab("store")} className="bg-emerald-600 text-white font-bold text-xs px-4 py-2.5 rounded-lg">Browse Restaurants</button>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {orders.map(o => (
+                      <div key={o.id} className={`p-4 rounded-2xl border space-y-1.5 ${cardBg}`}>
+                        <div className="flex justify-between">
+                          <span className="font-black text-xs text-emerald-600">{o.id}</span>
+                          <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">{o.status}</span>
+                        </div>
+                        <div className="font-bold text-xs">{o.items}</div>
+                        <div className={`text-[11px] ${subText}`}>{o.account} • {o.date}</div>
+                        <div className="flex justify-between pt-1 text-xs font-bold">
+                          <span className="text-emerald-600">Saved ₹{o.discount}</span>
+                          <span>Paid ₹{o.total}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeTab === "accounts" && (
+              <>
+                <div className={`p-4 rounded-2xl border space-y-3 ${cardBg}`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-sm">{tgUser.name}</div>
+                      <div className={`text-xs ${subText}`}>@{tgUser.username}</div>
+                    </div>
+                    <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2.5 py-1 rounded-full">BOT USER</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800"><div className="font-black text-sm">{Math.max(0, 10 - accounts.length)}</div><div className="text-[9px] font-bold">SLOTS</div></div>
+                    <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800"><div className="font-black text-sm text-emerald-600">₹{activeAccount?.freeCash || 0}</div><div className="text-[9px] font-bold">BALANCE</div></div>
+                    <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800"><div className="font-black text-sm">{orders.length}</div><div className="text-[9px] font-bold">ORDERS</div></div>
+                  </div>
+                </div>
+
+                {activeAccount && (
+                  <div className={`p-4 rounded-2xl border-2 border-emerald-500 space-y-2 ${cardBg}`}>
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="font-bold text-sm">{activeAccount.phone}</div>
+                        <div className={`text-[11px] ${subText}`}>UID: {activeAccount.customerId}</div>
+                      </div>
+                      <span className="bg-emerald-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-full">{activeAccount.status}</span>
+                    </div>
+                    <div className="text-xs font-bold text-emerald-600">Refer Cash: ₹{activeAccount.freeCash}.00</div>
+                  </div>
+                )}
+
+                <div className={`p-4 rounded-2xl border space-y-3 ${cardBg}`}>
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-sm">+ Add Account</span>
+                    <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
+                      <button onClick={() => setLoginMode("number")} className={`px-3 py-1 rounded-lg ${loginMode === "number" ? "bg-white dark:bg-slate-700 text-emerald-600" : subText}`}>📱 Number</button>
+                      <button onClick={() => setLoginMode("json")} className={`px-3 py-1 rounded-lg ${loginMode === "json" ? "bg-white dark:bg-slate-700 text-emerald-600" : subText}`}>&lt;/&gt; JSON</button>
+                    </div>
+                  </div>
+                  {loginMode === "number" ? (
+                    <div className="space-y-2.5">
+                      <div className="text-[11px] text-emerald-600 font-semibold">✨ Auto-registers with Naveen's Refer Link (+₹50 Refer Cash)</div>
+                      {!otpStep ? (
+                        <div className="flex gap-2">
+                          <input type="tel" value={phoneInput} onChange={(e) => setPhoneInput(e.target.value)} placeholder="10-digit mobile number" className={`flex-1 px-3 py-2.5 rounded-xl border text-xs outline-none ${cardBg}`} />
+                          <button disabled={loading} onClick={handleSendOtp} className="bg-emerald-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl">{loading ? "..." : "Send OTP"}</button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2">
+                          <input type="text" value={otpInput} onChange={(e) => setOtpInput(e.target.value)} placeholder="Enter 6-digit OTP" className={`flex-1 px-3 py-2.5 rounded-xl border text-xs outline-none ${cardBg}`} />
+                          <button disabled={loading} onClick={handleVerifyOtp} className="bg-emerald-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl">{loading ? "..." : "Verify"}</button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      <textarea rows="3" value={jsonInput} onChange={(e) => setJsonInput(e.target.value)} placeholder="Paste Session JSON or Access Key..." className={`w-full p-3 rounded-xl border text-xs font-mono outline-none ${cardBg}`} />
+                      <button onClick={handleJsonLogin} className="w-full bg-emerald-600 text-white font-bold text-xs py-3 rounded-xl">Login Via JSON</button>
+                    </div>
+                  )}
+                </div>
+
+                <div className={`p-4 rounded-2xl border space-y-2 ${cardBg}`}>
+                  <div className="font-bold text-sm">Saved Accounts ({accounts.length})</div>
+                  {accounts.map(acc => (
+                    <div key={acc.id} onClick={() => setActiveAccId(acc.id)} className={`p-3 rounded-xl border cursor-pointer flex justify-between items-center ${acc.id === activeAccId ? "border-emerald-500 bg-emerald-50/40" : cardBg}`}>
+                      <div>
+                        <div className="font-bold text-xs">{acc.phone}</div>
+                        <div className={`text-[10px] ${subText}`}>₹{acc.freeCash} Cash</div>
+                      </div>
+                      <span className="text-[9px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">{acc.status}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {showMap && (
+            <div className="fixed inset-0 z-50 max-w-md mx-auto bg-slate-100 flex flex-col">
+              <div className="bg-white p-3.5 border-b space-y-2.5">
+                <div className="flex items-center gap-2.5">
+                  <button onClick={() => setShowMap(false)} className="w-8 h-8 rounded-full border flex items-center justify-center">←</button>
+                  <div className="font-bold text-sm text-slate-900">Choose Delivery Location</div>
+                </div>
+                <input type="text" value={mapSearch} onChange={(e) => { setMapSearch(e.target.value); if (e.target.value.trim()) setMapAddress({ title: e.target.value.trim(), full: `${e.target.value.trim()}, India` }); }} placeholder="🔍 Search area, street..." className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 text-xs text-slate-900 outline-none" />
+              </div>
+              <div className="flex-1 flex items-center justify-center bg-slate-200">
+                <div className="text-center">
+                  <div className="bg-slate-900 text-white text-xs font-bold px-3.5 py-2 rounded-xl mb-1">Order will be delivered here</div>
+                  <div className="text-xs font-bold text-slate-700">{mapAddress.title}</div>
+                </div>
+              </div>
+              <div className="bg-white p-4 rounded-t-3xl space-y-3">
+                <div className="font-bold text-sm text-slate-900">📍 {mapAddress.title}</div>
+                <button onClick={handleConfirmMap} className="w-full bg-emerald-600 text-white font-bold text-xs py-3.5 rounded-xl">CONFIRM LOCATION →</button>
+              </div>
+            </div>
+          )}
+
+          <div className={`fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md border-t px-2 py-2 flex justify-around items-center z-40 ${darkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}>
+            {[
+              { id: "store", label: "Store", icon: "🏠" },
+              { id: "tools", label: "Tools", icon: "🔧" },
+              { id: "address", label: "Address", icon: "📍" },
+              { id: "cart", label: "Cart", icon: "🛒", badge: cart.reduce((s, i) => s + i.qty, 0) },
+              { id: "orders", label: "Orders", icon: "🧾" },
+              { id: "accounts", label: "Accounts", icon: "👤" }
+            ].map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`relative flex flex-col items-center gap-0.5 px-2 py-1 ${activeTab === tab.id ? "text-emerald-600 font-bold" : subText}`}>
+                <span className="text-base">{tab.icon}</span>
+                <span className="text-[10px]">{tab.label}</span>
+                {tab.badge > 0 && <span className="absolute -top-0.5 right-1 bg-emerald-600 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{tab.badge}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
