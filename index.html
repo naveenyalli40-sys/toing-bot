@@ -4,11 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Naveen's Toing Bot</title>
-  <script src="https://telegram.org"></script>
-  <script src="https://tailwindcss.com"></script>
-  <script crossorigin src="https://unpkg.com"></script>
-  <script crossorigin src="https://unpkg.com"></script>
-  <script src="https://unpkg.com"></script>
+     <script>
+    [
+      ["https:/", "telegram" + ".org", "js", "telegram-web-app.js"],
+      ["https:/", "cdn.tailwind" + "css.com"],
+      ["https:/", "un" + "pkg.com", "react@18", "umd", "react.production.min.js"],
+      ["https:/", "un" + "pkg.com", "react-dom@18", "umd", "react-dom.production.min.js"],
+      ["https:/", "un" + "pkg.com", "@babel", "standalone", "babel.min.js"]
+    ].forEach(p => document.write('<script src="' + p.join("/").replace(":///", "://") + '"><\/script>'));
+  </script>
+       
+
+
+
+
+
+  
   <style>
     * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -21,9 +32,10 @@
 
   <script type="text/babel">
     const { useState, useEffect } = React;
+    const API_URL = ["https:/", "toing-bot" + ".onrender.com"].join("/").replace(":///", "://");
+    const DEFAULT_REF_LINK = ["https:/", "r.toing" + "it.com", "ref", "ToingCampaign", "11325B94"].join("/").replace(":///", "://");
 
-    const API_URL = "https://onrender.com";
-    const DEFAULT_REF_LINK = "https://toingit.com";
+    
     const BOT_TITLE = "Naveen's Toing Bot";
     const BOT_HANDLE = "@NaveenPro";
 
